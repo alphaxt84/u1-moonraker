@@ -1,0 +1,1370 @@
+openapi: 3.0.3
+info:
+  title: Snapmaker U1 Klipper & Moonraker API
+  description: |
+    ### REST API Documentation for Moonraker & Klipper on Snapmaker U1
+    
+    This OpenAPI 3.0 specification documents the HTTP REST API endpoints provided by the **Moonraker** web server to control and monitor the **Klipper** 3D printer firmware on the **Snapmaker U1** (multi-toolhead / toolchanger 3D printer).
+    
+    Interface reference for the repository: [alphaxt84/u1-moonraker](https://github.com/alphaxt84/u1-moonraker)
+    
+    #### Key Features:
+    - **Printer Diagnostics & Status:** Klippy state (`ready`, `startup`, `error`, `shutdown`).
+    - **Object Telemetry:** Real-time query of toolhead positions (`toolhead`), extruders (`extruder`, `extruder1`, toolchanger T0–T3), heated bed (`heater_bed`), cooling fans, and print progress (`print_stats`).
+    - **G-Code Execution:** Send raw G-code commands and custom Klipper macros (`G28`, `M104`, toolhead change commands).
+    - **Print Job Management:** Start, pause, resume, and cancel print jobs.
+    - **File Management:** Upload and metadata extraction for G-code and Snapmaker U1 3MF files including preview thumbnails.
+    - **Server & System Control:** Moonraker configuration, caches (temperature history, G-code console history), print job queue, Klipper/OS restarts, and webcam streams.
+  version: 1.0.0
+  contact:
+    name: U1 Moonraker Integration
+    url: https://github.com/alphaxt84/u1-moonraker
+  license:
+    name: GPL-3.0
+    url: https://www.gnu.org/licenses/gpl-3.0.en.html
+
+servers:
+  - url: http://{printer_ip}:7125
+    description: Local Moonraker instance on the Snapmaker U1
+    variables:
+      printer_ip:
+        default: 192.168.1.100
+        description: IP address or hostname of the Snapmaker U1 on your local network
+
+tags:
+  - name: Printer Status & Diagnostics
+    description: Klipper firmware status queries and emergency stop controls
+  - name: Printer Control & G-Code
+    description: Send G-code scripts and execute Klipper macros
+  - name: Print Job Management
+    description: Control active print jobs (start, pause, resume, cancel)
+  - name: Printer Objects & Telemetry
+    description: Real-time state and telemetry queries (extruders, bed temperature, toolheads, sensors)
+  - name: File Management (G-Code & 3MF)
+    description: Upload, download, directory operations, and print file metadata analysis
+  - name: Moonraker Server & Cache
+    description: Server status, configuration queries, temperature and console history
+  - name: Job Queue
+    description: Print job queue management
+  - name: Machine & Host OS
+    description: Host system resources, OS reboot/shutdown, service restarts, and power devices
+  - name: Webcams
+    description: Configured webcam streams and camera snapshots
+
+paths:
+  # =========================================================================
+  # PRINTER STATUS & DIAGNOSTICS
+  # =========================================================================
+  /printer/info:
+    get:
+      tags:
+        - Printer Status & Diagnostics
+      summary: Retrieve Klipper host status
+      description: Returns diagnostic and version information for the Klippy host software.
+      operationId: getPrinterInfo
+      responses:
+        "200":
+          description: Successfully retrieved Klipper host information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrinterInfoResponse'
+
+  /printer/emergency_stop:
+    post:
+      tags:
+        - Printer Status & Diagnostics
+      summary: Trigger emergency stop (M112)
+      description: Sends an immediate emergency stop command to Klipper (equivalent to M112). All stepper motors and heating elements are immediately disabled.
+      operationId: emergencyStop
+      responses:
+        "200":
+          description: Emergency stop successfully dispatched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /printer/restart:
+    post:
+      tags:
+        - Printer Status & Diagnostics
+      summary: Restart Klippy host software
+      description: Restarts the Klippy Python host software process (equivalent to RESTART).
+      operationId: restartKlippy
+      responses:
+        "200":
+          description: Klippy restart initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /printer/firmware_restart:
+    post:
+      tags:
+        - Printer Status & Diagnostics
+      summary: Restart Klipper MCU firmware
+      description: Restarts the firmware of all connected micro-controller units (MCUs) and Klippy (equivalent to FIRMWARE_RESTART).
+      operationId: firmwareRestart
+      responses:
+        "200":
+          description: Firmware restart initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  # =========================================================================
+  # PRINTER CONTROL & G-CODE
+  # =========================================================================
+  /printer/gcode/script:
+    post:
+      tags:
+        - Printer Control & G-Code
+      summary: Execute G-code command or macro
+      description: Executes one or more G-code commands or custom Klipper macros (e.g., homing `G28`, toolhead switch `T0`, bed temperature `M140 S60`).
+      operationId: runGcodeScript
+      parameters:
+        - name: script
+          in: query
+          description: G-code command string (can alternatively be sent in the JSON body)
+          required: false
+          schema:
+            type: string
+            example: "G28"
+      requestBody:
+        description: JSON payload containing the G-code script
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                script:
+                  type: string
+                  example: "G28 X Y\nM104 S215 T0"
+      responses:
+        "200":
+          description: G-code successfully dispatched to Klipper
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+        "400":
+          description: Invalid request or Klippy is not ready
+
+  /printer/gcode/help:
+    get:
+      tags:
+        - Printer Control & G-Code
+      summary: List available G-code commands and macros
+      description: Returns all G-code commands and custom macros registered in Klipper along with their help descriptions.
+      operationId: getGcodeHelp
+      responses:
+        "200":
+          description: Dictionary of all available G-code commands
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    example:
+                      G28: "Home axes"
+                      M104: "Set Hotend Temperature"
+                      T0: "Switch to Tool 0"
+                      T1: "Switch to Tool 1"
+
+  # =========================================================================
+  # PRINT JOB MANAGEMENT
+  # =========================================================================
+  /printer/print/start:
+    post:
+      tags:
+        - Print Job Management
+      summary: Start a print job
+      description: Starts printing a G-code or 3MF file stored in the printer storage.
+      operationId: startPrintJob
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          description: File name or relative path in the gcodes root folder
+          schema:
+            type: string
+            example: "benchy_u1_pla.gcode"
+      responses:
+        "200":
+          description: Print job started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+        "404":
+          description: File not found
+
+  /printer/print/pause:
+    post:
+      tags:
+        - Print Job Management
+      summary: Pause current print job
+      description: Pauses the currently active print job and parks the toolhead if configured.
+      operationId: pausePrintJob
+      responses:
+        "200":
+          description: Print job paused successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /printer/print/resume:
+    post:
+      tags:
+        - Print Job Management
+      summary: Resume paused print job
+      description: Resumes a previously paused print job.
+      operationId: resumePrintJob
+      responses:
+        "200":
+          description: Print job resumed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /printer/print/cancel:
+    post:
+      tags:
+        - Print Job Management
+      summary: Cancel active print job
+      description: Cancels the currently running print job.
+      operationId: cancelPrintJob
+      responses:
+        "200":
+          description: Print job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  # =========================================================================
+  # PRINTER OBJECTS & TELEMETRY
+  # =========================================================================
+  /printer/objects/list:
+    get:
+      tags:
+        - Printer Objects & Telemetry
+      summary: List available Klipper printer objects
+      description: Returns a list of all objects currently registered in Klipper available for querying (e.g., `toolhead`, `extruder`, `heater_bed`, `print_stats`).
+      operationId: listPrinterObjects
+      responses:
+        "200":
+          description: List of registered Klipper objects
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      objects:
+                        type: array
+                        items:
+                          type: string
+                        example:
+                          - "webhooks"
+                          - "toolhead"
+                          - "gcode_move"
+                          - "motion_report"
+                          - "print_stats"
+                          - "display_status"
+                          - "extruder"
+                          - "extruder1"
+                          - "heater_bed"
+                          - "fan"
+
+  /printer/objects/query:
+    get:
+      tags:
+        - Printer Objects & Telemetry
+      summary: Query Klipper object states (GET)
+      description: Queries the real-time state of specific printer objects using URL query parameters (e.g., bed temperature, extruder temperatures, toolhead position).
+      operationId: queryPrinterObjectsGet
+      parameters:
+        - name: objects
+          in: query
+          description: Objects to query with optional attribute filters
+          required: false
+          schema:
+            type: string
+            example: "print_stats&heater_bed&extruder=temperature,target"
+      responses:
+        "200":
+          description: Current values of requested Klipper objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrinterObjectsQueryResponse'
+    post:
+      tags:
+        - Printer Objects & Telemetry
+      summary: Query Klipper object states (POST)
+      description: Queries real-time states using a structured JSON body.
+      operationId: queryPrinterObjectsPost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                objects:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    nullable: true
+                    items:
+                      type: string
+                  example:
+                    print_stats: null
+                    toolhead:
+                      - "position"
+                      - "status"
+                      - "homed_axes"
+                    heater_bed:
+                      - "temperature"
+                      - "target"
+                    extruder:
+                      - "temperature"
+                      - "target"
+      responses:
+        "200":
+          description: Current values of requested Klipper objects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrinterObjectsQueryResponse'
+
+  /printer/objects/subscribe:
+    post:
+      tags:
+        - Printer Objects & Telemetry
+      summary: Subscribe to object status updates
+      description: Registers a subscription for status updates on specific Klipper objects (used primarily for WebSocket clients).
+      operationId: subscribePrinterObjects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                objects:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    nullable: true
+                    items:
+                      type: string
+      responses:
+        "200":
+          description: Subscription confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrinterObjectsQueryResponse'
+
+  # =========================================================================
+  # FILE MANAGEMENT
+  # =========================================================================
+  /server/files/list:
+    get:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: List files in a root directory
+      description: Lists all stored files and directories in the specified root folder (e.g., `gcodes` or `config`).
+      operationId: listFiles
+      parameters:
+        - name: root
+          in: query
+          required: false
+          description: Root folder name (default is `gcodes`)
+          schema:
+            type: string
+            enum: [gcodes, config, config_examples, docs]
+            default: gcodes
+      responses:
+        "200":
+          description: List of files and folders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileEntry'
+
+  /server/files/metadata:
+    get:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Retrieve print file metadata (G-code / 3MF)
+      description: Returns parsed slicer metadata for a print file (print time, filament usage, layer height, dimensions, and thumbnails).
+      operationId: getFileMetadata
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          description: Relative path to the G-code or 3MF file
+          schema:
+            type: string
+            example: "snapmaker_u1_model.3mf"
+      responses:
+        "200":
+          description: Detailed file metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileMetadataResponse'
+        "404":
+          description: File not found
+
+  /server/files/upload:
+    post:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Upload print file (G-code / 3MF)
+      description: Uploads a G-code or 3MF file to the Snapmaker U1 storage. Can optionally start printing immediately (`print=true`).
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File binary payload
+                root:
+                  type: string
+                  default: gcodes
+                  description: Destination root folder
+                print:
+                  type: boolean
+                  default: false
+                  description: When true, the print starts immediately upon upload completion
+      responses:
+        "201":
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      item:
+                        $ref: '#/components/schemas/FileEntry'
+                      print_started:
+                        type: boolean
+
+  /server/files/delete:
+    delete:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Delete a file
+      description: Removes a file from printer storage.
+      operationId: deleteFile
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Path to the target file
+          schema:
+            type: string
+            example: "gcodes/old_print.gcode"
+      responses:
+        "200":
+          description: File deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    example: "old_print.gcode"
+
+  /server/files/directory:
+    post:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Create directory
+      description: Creates a new subdirectory in printer storage.
+      operationId: createDirectory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Directory path to create
+          schema:
+            type: string
+            example: "gcodes/PLA_Projects"
+      responses:
+        "200":
+          description: Directory created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+    delete:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Delete directory
+      description: Deletes an existing directory.
+      operationId: deleteDirectory
+      parameters:
+        - name: path
+          in: query
+          required: true
+          description: Directory path to delete
+          schema:
+            type: string
+        - name: force
+          in: query
+          required: false
+          description: When true, recursively deletes directory and its contents
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Directory deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /server/files/move:
+    post:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Move or rename file / directory
+      description: Moves or renames an existing file or directory.
+      operationId: moveFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source
+                - dest
+              properties:
+                source:
+                  type: string
+                  example: "gcodes/test.gcode"
+                dest:
+                  type: string
+                  example: "gcodes/archive/test.gcode"
+      responses:
+        "200":
+          description: File moved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /server/files/copy:
+    post:
+      tags:
+        - File Management (G-Code & 3MF)
+      summary: Copy file or directory
+      description: Creates a duplicate copy of a file or directory.
+      operationId: copyFile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source
+                - dest
+              properties:
+                source:
+                  type: string
+                  example: "gcodes/template.gcode"
+                dest:
+                  type: string
+                  example: "gcodes/template_copy.gcode"
+      responses:
+        "200":
+          description: File copied successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  # =========================================================================
+  # MOONRAKER SERVER & CACHE
+  # =========================================================================
+  /server/info:
+    get:
+      tags:
+        - Moonraker Server & Cache
+      summary: Moonraker server health & status
+      description: Returns status information about the Moonraker process, Klippy connection state, and active server components.
+      operationId: getServerInfo
+      responses:
+        "200":
+          description: Moonraker server status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfoResponse'
+
+  /server/config:
+    get:
+      tags:
+        - Moonraker Server & Cache
+      summary: Retrieve Moonraker configuration
+      description: Returns the currently loaded configuration from `moonraker.conf`.
+      operationId: getServerConfig
+      responses:
+        "200":
+          description: Active Moonraker configuration sections
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      config:
+                        type: object
+
+  /server/restart:
+    post:
+      tags:
+        - Moonraker Server & Cache
+      summary: Restart Moonraker server
+      description: Restarts the Moonraker Python service daemon.
+      operationId: restartServer
+      responses:
+        "200":
+          description: Moonraker restart initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /server/gcode_store:
+    get:
+      tags:
+        - Moonraker Server & Cache
+      summary: Retrieve G-code console history
+      description: Retrieves buffered terminal output of G-code responses from memory (up to 1000 lines).
+      operationId: getGcodeStore
+      parameters:
+        - name: count
+          in: query
+          required: false
+          description: Maximum number of lines to return
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Terminal output history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      gcode_store:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            message:
+                              type: string
+                            time:
+                              type: number
+                            type:
+                              type: string
+                              enum: [response, command, echo]
+
+  /server/temperature_store:
+    get:
+      tags:
+        - Moonraker Server & Cache
+      summary: Retrieve temperature history
+      description: Returns historical time-series temperature data for all heaters and temperature sensors (extruders, bed, chamber, MCU).
+      operationId: getTemperatureStore
+      parameters:
+        - name: include_monitors
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Historical temperature points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        temperatures:
+                          type: array
+                          items:
+                            type: number
+                        targets:
+                          type: array
+                          items:
+                            type: number
+                        powers:
+                          type: array
+                          items:
+                            type: number
+
+  # =========================================================================
+  # JOB QUEUE
+  # =========================================================================
+  /server/job_queue/status:
+    get:
+      tags:
+        - Job Queue
+      summary: Retrieve job queue status
+      description: Returns the status of the print job queue and all queued print jobs.
+      operationId: getJobQueueStatus
+      responses:
+        "200":
+          description: Job queue state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      queue_state:
+                        type: string
+                        enum: [ready, paused, starting]
+                      jobs:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/QueuedJob'
+
+  /server/job_queue/job:
+    post:
+      tags:
+        - Job Queue
+      summary: Enqueue print job
+      description: Adds one or more print files to the job queue.
+      operationId: addJobQueueJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - filenames
+              properties:
+                filenames:
+                  type: array
+                  items:
+                    type: string
+                  example: ["part1.gcode", "part2.3mf"]
+      responses:
+        "200":
+          description: Jobs successfully enqueued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      queued_jobs:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/QueuedJob'
+    delete:
+      tags:
+        - Job Queue
+      summary: Remove job from queue
+      description: Removes a job from the queue by its job ID.
+      operationId: removeJobQueueJob
+      parameters:
+        - name: job_ids
+          in: query
+          required: true
+          description: Comma-separated list of job IDs
+          schema:
+            type: string
+            example: "12345"
+      responses:
+        "200":
+          description: Job removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /server/job_queue/pause:
+    post:
+      tags:
+        - Job Queue
+      summary: Pause job queue
+      description: Pauses automatic processing of subsequent jobs in the queue.
+      operationId: pauseJobQueue
+      responses:
+        "200":
+          description: Queue paused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /server/job_queue/start:
+    post:
+      tags:
+        - Job Queue
+      summary: Start / resume job queue
+      description: Starts or resumes processing jobs in the queue.
+      operationId: startJobQueue
+      responses:
+        "200":
+          description: Queue started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  # =========================================================================
+  # MACHINE & HOST OS
+  # =========================================================================
+  /machine/system_info:
+    get:
+      tags:
+        - Machine & Host OS
+      summary: Retrieve host system information
+      description: Returns information about host controller hardware (CPU, RAM, storage, network interfaces, Linux distribution).
+      operationId: getSystemInfo
+      responses:
+        "200":
+          description: System information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      system_info:
+                        type: object
+                        properties:
+                          cpu_info:
+                            type: object
+                          distribution:
+                            type: object
+                          network:
+                            type: object
+
+  /machine/proc_stats:
+    get:
+      tags:
+        - Machine & Host OS
+      summary: CPU and memory process statistics
+      description: Returns real-time utilization stats for Moonraker, Klipper, and the Linux OS (CPU %, memory usage, core temperatures).
+      operationId: getProcStats
+      responses:
+        "200":
+          description: Process statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      moonraker_stats:
+                        type: object
+                      cpu_temp:
+                        type: number
+                      system_cpu_usage:
+                        type: object
+                      system_memory:
+                        type: object
+
+  /machine/shutdown:
+    post:
+      tags:
+        - Machine & Host OS
+      summary: Shut down host operating system
+      description: Safely initiates a system shutdown of the printer's Linux host.
+      operationId: shutdownMachine
+      responses:
+        "200":
+          description: Shutdown initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /machine/reboot:
+    post:
+      tags:
+        - Machine & Host OS
+      summary: Reboot host operating system
+      description: Safely reboots the printer's Linux host system.
+      operationId: rebootMachine
+      responses:
+        "200":
+          description: Reboot initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  /machine/device_power/devices:
+    get:
+      tags:
+        - Machine & Host OS
+      summary: Query smart power devices
+      description: Returns the power state of configured smart relays or power plugs.
+      operationId: getDevicePowerDevices
+      responses:
+        "200":
+          description: List of power devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      devices:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            device:
+                              type: string
+                            status:
+                              type: string
+                              enum: ["on", "off", "error", "init"]
+
+  /machine/device_power/device:
+    post:
+      tags:
+        - Machine & Host OS
+      summary: Control power device
+      description: Turns a configured power device on, off, or toggles its state.
+      operationId: setDevicePower
+      parameters:
+        - name: device
+          in: query
+          required: true
+          description: Configured device name
+          schema:
+            type: string
+        - name: action
+          in: query
+          required: true
+          description: Switching action
+          schema:
+            type: string
+            enum: ["on", "off", "toggle"]
+      responses:
+        "200":
+          description: Power device state updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    additionalProperties:
+                      type: string
+
+  /machine/update/status:
+    get:
+      tags:
+        - Machine & Host OS
+      summary: Software update status
+      description: Checks for available updates for Klipper, Moonraker, web frontends, and OS packages.
+      operationId: getUpdateStatus
+      responses:
+        "200":
+          description: Update status overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      version_info:
+                        type: object
+
+  /machine/update/refresh:
+    post:
+      tags:
+        - Machine & Host OS
+      summary: Refresh software update status
+      description: Triggers a git fetch across all tracked repositories and refreshes package status.
+      operationId: refreshUpdateStatus
+      responses:
+        "200":
+          description: Refresh initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardOkResponse'
+
+  # =========================================================================
+  # WEBCAMS
+  # =========================================================================
+  /server/webcams/list:
+    get:
+      tags:
+        - Webcams
+      summary: Retrieve configured webcams
+      description: Returns a list of all configured webcams on the Snapmaker U1 including live streaming URLs and snapshot URLs.
+      operationId: listWebcams
+      responses:
+        "200":
+          description: List of webcams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      webcams:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WebcamInfo'
+
+# =========================================================================
+# COMPONENTS & SCHEMAS
+# =========================================================================
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Optional Moonraker API Key for untrusted clients
+
+  schemas:
+    StandardOkResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          example: "ok"
+
+    PrinterInfoResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            state:
+              type: string
+              enum: [ready, startup, shutdown, error]
+              example: "ready"
+            state_message:
+              type: string
+              example: "Printer is ready"
+            hostname:
+              type: string
+              example: "snapmaker-u1"
+            klipper_path:
+              type: string
+              example: "/home/lava/klipper"
+            python_path:
+              type: string
+              example: "/home/lava/klipper-env/bin/python"
+            software_version:
+              type: string
+              example: "v0.12.0-snapmaker-u1"
+
+    ServerInfoResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            klippy_connected:
+              type: boolean
+              example: true
+            klippy_state:
+              type: string
+              example: "ready"
+            components:
+              type: array
+              items:
+                type: string
+              example:
+                - "database"
+                - "file_manager"
+                - "update_manager"
+                - "klippy_apis"
+                - "job_queue"
+                - "webcam"
+            moonraker_version:
+              type: string
+              example: "v0.8.0-u1"
+
+    PrinterObjectsQueryResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            eventtime:
+              type: number
+              example: 171456789.123
+            status:
+              type: object
+              description: Live state dictionary of queried Klipper objects
+              properties:
+                print_stats:
+                  type: object
+                  properties:
+                    filename:
+                      type: string
+                      example: "snapmaker_multi_color.3mf"
+                    total_duration:
+                      type: number
+                      example: 1820.5
+                    print_duration:
+                      type: number
+                      example: 1740.2
+                    filament_used:
+                      type: number
+                      example: 1450.8
+                    state:
+                      type: string
+                      enum: [standby, printing, paused, complete, error]
+                      example: "printing"
+                    message:
+                      type: string
+                      example: ""
+                toolhead:
+                  type: object
+                  properties:
+                    position:
+                      type: array
+                      items:
+                        type: number
+                      example: [120.0, 110.5, 45.2, 342.1]
+                    homed_axes:
+                      type: string
+                      example: "xyz"
+                    print_time:
+                      type: number
+                      example: 1740.2
+                    estimated_print_time:
+                      type: number
+                      example: 3600.0
+                    extruder:
+                      type: string
+                      example: "extruder"
+                heater_bed:
+                  type: object
+                  properties:
+                    temperature:
+                      type: number
+                      example: 60.0
+                    target:
+                      type: number
+                      example: 60.0
+                    power:
+                      type: number
+                      example: 0.35
+                extruder:
+                  type: object
+                  description: Primary toolhead / extruder T0
+                  properties:
+                    temperature:
+                      type: number
+                      example: 215.2
+                    target:
+                      type: number
+                      example: 215.0
+                    power:
+                      type: number
+                      example: 0.42
+                    pressure_advance:
+                      type: number
+                      example: 0.04
+                extruder1:
+                  type: object
+                  description: Secondary toolhead / extruder T1 (Snapmaker U1 Multi-Tool)
+                  properties:
+                    temperature:
+                      type: number
+                      example: 200.0
+                    target:
+                      type: number
+                      example: 200.0
+                    power:
+                      type: number
+                      example: 0.38
+
+    FileEntry:
+      type: object
+      properties:
+        path:
+          type: string
+          example: "benchy.gcode"
+        modified:
+          type: number
+          example: 1714561234.0
+        size:
+          type: integer
+          example: 4528120
+        permissions:
+          type: string
+          example: "rw"
+
+    FileMetadataResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            filename:
+              type: string
+              example: "sample_model.3mf"
+            size:
+              type: integer
+              example: 12458900
+            modified:
+              type: number
+              example: 1714561234.0
+            slicer:
+              type: string
+              example: "Snapmaker Orca / Snapmaker Studio"
+            slicer_version:
+              type: string
+              example: "2.1.0"
+            estimated_time:
+              type: number
+              example: 4320.0
+            filament_total:
+              type: number
+              example: 15420.5
+            layer_height:
+              type: number
+              example: 0.2
+            first_layer_height:
+              type: number
+              example: 0.28
+            layer_count:
+              type: integer
+              example: 250
+            thumbnails:
+              type: array
+              items:
+                type: object
+                properties:
+                  width:
+                    type: integer
+                    example: 300
+                  height:
+                    type: integer
+                    example: 300
+                  size:
+                    type: integer
+                    example: 15420
+                  relative_path:
+                    type: string
+                    example: ".thumbs/sample_model-300x300.png"
+
+    QueuedJob:
+      type: object
+      properties:
+        job_id:
+          type: string
+          example: "job_01hxyz"
+        filename:
+          type: string
+          example: "bracket.gcode"
+        time_added:
+          type: number
+          example: 1714562000.0
+        time_in_queue:
+          type: number
+          example: 120.0
+
+    WebcamInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "chamber_cam"
+        location:
+          type: string
+          example: "printer"
+        service:
+          type: string
+          example: "mjpegstreamer"
+        stream_url:
+          type: string
+          example: "/webcam/?action=stream"
+        snapshot_url:
+          type: string
+          example: "/webcam/?action=snapshot"
+        flip_horizontal:
+          type: boolean
+          example: false
+        flip_vertical:
+          type: boolean
+          example: false
+        rotation:
+          type: integer
+          example: 0
+        aspect_ratio:
+          type: string
+          example: "16:9"

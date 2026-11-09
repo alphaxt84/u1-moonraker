@@ -1,0 +1,1793 @@
+{
+  "openapi" : "3.0.3",
+  "info" : {
+    "title" : "Snapmaker U1 Klipper & Moonraker API",
+    "description" : "### REST-API Dokumentation für Moonraker & Klipper auf dem Snapmaker U1\n\nDiese API-Spezifikation dokumentiert die HTTP-REST-Schnittstellen des Webservers **Moonraker** zur Steuerung und Überwachung der **Klipper**-Firmware auf dem **Snapmaker U1** (Mehrfach-Druckkopf / Toolchanger 3D-Drucker).\n\nSchnittstellen-Referenz für das Repository: [alphaxt84/u1-moonraker](https://github.com/alphaxt84/u1-moonraker)\n\n#### Hauptfunktionen:\n- **Drucker-Diagnose & Status:** Zustand von Klippy (`ready`, `startup`, `error`, `shutdown`).\n- **Objekt-Telemetrie:** Echtzeit-Abfrage von Druckkopf-Positionen (`toolhead`), Extrudern (`extruder`, `extruder1`, Toolchanger T0–T3), Heizbett (`heater_bed`), Lüftern und Druckfortschritt (`print_stats`).\n- **G-Code-Ausführung:** Senden beliebiger G-Code-Befehle und Makros (`G28`, `M104`, Toolwechsel).\n- **Druckauftrags-Steuerung:** Start, Pause, Resume und Abbruch von Druckjobs.\n- **Dateiverwaltung:** Upload und Metadaten-Extraktion von G-Code und Snapmaker U1 3MF-Dateien inklusive Vorschaubildern (Thumbnails).\n- **Server- & Systemsteuerung:** Moonraker-Konfiguration, Cache (Temperaturverlauf, G-Code-Konsole), Job-Queue, Neustart von Klipper/System und Kamera-Streams.\n",
+    "version" : "1.0.0",
+    "contact" : {
+      "name" : "U1 Moonraker Integration",
+      "url" : "https://github.com/alphaxt84/u1-moonraker"
+    },
+    "license" : {
+      "name" : "GPL-3.0",
+      "url" : "https://www.gnu.org/licenses/gpl-3.0.en.html"
+    }
+  },
+  "servers" : [ {
+    "description" : "SwaggerHub API Auto Mocking",
+    "url" : "https://virtserver.swaggerhub.com/klipper/Klipper/1.0.0"
+  }, {
+    "url" : "http://{printer_ip}:7125",
+    "description" : "Lokale Moonraker-Instanz auf dem Snapmaker U1",
+    "variables" : {
+      "printer_ip" : {
+        "default" : "192.168.1.100",
+        "description" : "IP-Adresse oder Hostname des Druckers im lokalen Netzwerk"
+      }
+    }
+  } ],
+  "tags" : [ {
+    "name" : "Printer Status & Diagnostics",
+    "description" : "Statusabfragen zur Klipper-Firmware und Not-Halt-Funktionen"
+  }, {
+    "name" : "Printer Control & G-Code",
+    "description" : "G-Code-Skripte senden und Klipper-Makros ausführen"
+  }, {
+    "name" : "Print Job Management",
+    "description" : "Steuerung des aktuellen Druckauftrags (Start, Pause, Resume, Cancel)"
+  }, {
+    "name" : "Printer Objects & Telemetry",
+    "description" : "Abfrage von Echtzeit-Zuständen (Extruder, Betttemperatur, Toolheads, Sensoren)"
+  }, {
+    "name" : "File Management (G-Code & 3MF)",
+    "description" : "Upload, Download, Verzeichnis-Operationen und Metadaten-Analyse"
+  }, {
+    "name" : "Moonraker Server & Cache",
+    "description" : "Server-Status, Konfigurationsabfrage, Temperatur- und Konsolen-Historie"
+  }, {
+    "name" : "Job Queue",
+    "description" : "Warteschlangen-Verwaltung für Druckaufträge"
+  }, {
+    "name" : "Machine & Host OS",
+    "description" : "Systemressourcen, OS-Reboot/Shutdown, Dienst-Neustarts und Geräte-Stromversorgung"
+  }, {
+    "name" : "Webcams",
+    "description" : "Abruf der konfigurierten Video-Streams und Kamera-Snapshots"
+  } ],
+  "paths" : {
+    "/printer/info" : {
+      "get" : {
+        "tags" : [ "Printer Status & Diagnostics" ],
+        "summary" : "Klipper Host-Status abrufen",
+        "description" : "Gibt Diagnose- und Versionsinformationen der Klippy-Hostsoftware zurück.",
+        "operationId" : "getPrinterInfo",
+        "responses" : {
+          "200" : {
+            "description" : "Erfolgreiche Rückgabe der Klipper-Informationen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PrinterInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/emergency_stop" : {
+      "post" : {
+        "tags" : [ "Printer Status & Diagnostics" ],
+        "summary" : "Not-Aus auslösen (Emergency Stop)",
+        "description" : "Sendet einen sofortigen Not-Aus-Befehl an Klipper (entspricht M112). Alle Motoren und Heizelemente werden sofort deaktiviert.",
+        "operationId" : "emergencyStop",
+        "responses" : {
+          "200" : {
+            "description" : "Not-Aus erfolgreich übermittelt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/restart" : {
+      "post" : {
+        "tags" : [ "Printer Status & Diagnostics" ],
+        "summary" : "Klippy-Hostsoftware neustarten",
+        "description" : "Startet den Klippy-Python-Prozess neu (entspricht RESTART).",
+        "operationId" : "restartKlippy",
+        "responses" : {
+          "200" : {
+            "description" : "Klippy-Neustart ausgelöst",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/firmware_restart" : {
+      "post" : {
+        "tags" : [ "Printer Status & Diagnostics" ],
+        "summary" : "Klipper-Firmware der MCUs neustarten",
+        "description" : "Startet die Firmware aller verbundenen Mikrocontroller (MCUs) und Klippy neu (entspricht FIRMWARE_RESTART).",
+        "operationId" : "firmwareRestart",
+        "responses" : {
+          "200" : {
+            "description" : "Firmware-Neustart ausgelöst",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/gcode/script" : {
+      "post" : {
+        "tags" : [ "Printer Control & G-Code" ],
+        "summary" : "G-Code-Kommando oder Makro ausführen",
+        "description" : "Führt einen oder mehrere G-Code-Befehle oder benutzerdefinierte Klipper-Makros aus (z. B. Homing `G28`, Toolhead-Wechsel `T0`, Bettheizung `M140 S60`).",
+        "operationId" : "runGcodeScript",
+        "parameters" : [ {
+          "name" : "script",
+          "in" : "query",
+          "description" : "G-Code-Befehl (kann alternativ im JSON-Body übergeben werden)",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "example" : "G28"
+          }
+        } ],
+        "requestBody" : {
+          "description" : "JSON-Payload mit dem G-Code-Skript",
+          "required" : false,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "script" : {
+                    "type" : "string",
+                    "example" : "G28 X Y\nM104 S215 T0"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "G-Code erfolgreich an Klipper übermittelt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Ungültige Anfrage oder Klippy nicht bereit"
+          }
+        }
+      }
+    },
+    "/printer/gcode/help" : {
+      "get" : {
+        "tags" : [ "Printer Control & G-Code" ],
+        "summary" : "Liste aller verfügbaren G-Code-Befehle und Makros",
+        "description" : "Gibt alle von Klipper registrierten G-Code-Befehle inklusive ihrer Hilfetexte zurück.",
+        "operationId" : "getGcodeHelp",
+        "responses" : {
+          "200" : {
+            "description" : "Wörterbuch aller G-Code-Befehle",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "additionalProperties" : {
+                        "type" : "string"
+                      },
+                      "example" : {
+                        "G28" : "Home axes",
+                        "M104" : "Set Hotend Temperature",
+                        "T0" : "Switch to Tool 0",
+                        "T1" : "Switch to Tool 1"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/print/start" : {
+      "post" : {
+        "tags" : [ "Print Job Management" ],
+        "summary" : "Druckauftrag starten",
+        "description" : "Startet den Druck einer auf dem Drucker abgelegten G-Code- oder 3MF-Datei.",
+        "operationId" : "startPrintJob",
+        "parameters" : [ {
+          "name" : "filename",
+          "in" : "query",
+          "required" : true,
+          "description" : "Dateiname oder relativer Pfad im gcodes-Verzeichnis",
+          "schema" : {
+            "type" : "string",
+            "example" : "benchy_u1_pla.gcode"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Druckvorgang gestartet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Datei nicht gefunden"
+          }
+        }
+      }
+    },
+    "/printer/print/pause" : {
+      "post" : {
+        "tags" : [ "Print Job Management" ],
+        "summary" : "Aktiven Druck pausieren",
+        "description" : "Pausiert den aktuell laufenden Druckauftrag und parkt ggf. den Druckkopf.",
+        "operationId" : "pausePrintJob",
+        "responses" : {
+          "200" : {
+            "description" : "Druckauftrag erfolgreich pausiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/print/resume" : {
+      "post" : {
+        "tags" : [ "Print Job Management" ],
+        "summary" : "Pausierten Druck fortsetzen",
+        "description" : "Setzt einen zuvor pausierten Druckauftrag fort.",
+        "operationId" : "resumePrintJob",
+        "responses" : {
+          "200" : {
+            "description" : "Druckauftrag fortgesetzt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/print/cancel" : {
+      "post" : {
+        "tags" : [ "Print Job Management" ],
+        "summary" : "Aktiven Druck abbrechen",
+        "description" : "Bricht den aktuellen Druckauftrag unwiderruflich ab.",
+        "operationId" : "cancelPrintJob",
+        "responses" : {
+          "200" : {
+            "description" : "Druckauftrag abgebrochen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/objects/list" : {
+      "get" : {
+        "tags" : [ "Printer Objects & Telemetry" ],
+        "summary" : "Liste aller verfügbaren Klipper-Objekte",
+        "description" : "Liefert eine Liste aller Objekte, die aktuell in Klipper registriert sind und abgefragt werden können (z. B. `toolhead`, `extruder`, `heater_bed`, `print_stats`).",
+        "operationId" : "listPrinterObjects",
+        "responses" : {
+          "200" : {
+            "description" : "Liste der registrierten Klipper-Objekte",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "objects" : {
+                          "type" : "array",
+                          "items" : {
+                            "type" : "string"
+                          },
+                          "example" : [ "webhooks", "toolhead", "gcode_move", "motion_report", "print_stats", "display_status", "extruder", "extruder1", "heater_bed", "fan" ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/objects/query" : {
+      "get" : {
+        "tags" : [ "Printer Objects & Telemetry" ],
+        "summary" : "Status bestimmter Klipper-Objekte abfragen (GET)",
+        "description" : "Fragt den Live-Zustand spezifischer Drucker-Objekte über URL-Query-Parameter ab (z. B. Betttemperatur, Extrudertemperatur, Toolhead-Position).",
+        "operationId" : "queryPrinterObjectsGet",
+        "parameters" : [ {
+          "name" : "objects",
+          "in" : "query",
+          "description" : "Abzufragende Objekte mit optionalen Attributen (z. B. `print_stats&toolhead=position,status`)",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "example" : "print_stats&heater_bed&extruder=temperature,target"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Statuswerte der angeforderten Klipper-Objekte",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PrinterObjectsQueryResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "Printer Objects & Telemetry" ],
+        "summary" : "Status bestimmter Klipper-Objekte abfragen (POST)",
+        "description" : "Fragt den Live-Zustand über einen strukturierten JSON-Body ab.",
+        "operationId" : "queryPrinterObjectsPost",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "objects" : {
+                    "type" : "object",
+                    "additionalProperties" : {
+                      "type" : "array",
+                      "nullable" : true,
+                      "items" : {
+                        "type" : "string"
+                      }
+                    },
+                    "example" : {
+                      "print_stats" : null,
+                      "toolhead" : [ "position", "status", "homed_axes" ],
+                      "heater_bed" : [ "temperature", "target" ],
+                      "extruder" : [ "temperature", "target" ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Statuswerte der angeforderten Klipper-Objekte",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PrinterObjectsQueryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/printer/objects/subscribe" : {
+      "post" : {
+        "tags" : [ "Printer Objects & Telemetry" ],
+        "summary" : "Objekt-Statusänderungen abonnieren",
+        "description" : "Registriert ein Abonnement für Status-Updates bestimmter Klipper-Objekte (primär für WebSocket-Clients, synchronisiert den internen Client-Status).",
+        "operationId" : "subscribePrinterObjects",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "objects" : {
+                    "type" : "object",
+                    "additionalProperties" : {
+                      "type" : "array",
+                      "nullable" : true,
+                      "items" : {
+                        "type" : "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Abonnement bestätigt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PrinterObjectsQueryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/list" : {
+      "get" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Dateiliste eines Stammverzeichnisses abrufen",
+        "description" : "Listet alle abgelegten Dateien und Ordner im angegebenen Root-Verzeichnis auf (z. B. `gcodes` oder `config`).",
+        "operationId" : "listFiles",
+        "parameters" : [ {
+          "name" : "root",
+          "in" : "query",
+          "required" : false,
+          "description" : "Stammverzeichnis (Standard ist `gcodes`)",
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "gcodes", "config", "config_examples", "docs" ],
+            "default" : "gcodes"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Liste der Dateien und Ordner",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/FileEntry"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/metadata" : {
+      "get" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Metadaten einer Druckdatei (G-Code / 3MF) abrufen",
+        "description" : "Liefert Slicer-Metadaten für eine Druckdatei (Druckzeit, Filamentverbrauch, Schichthöhe, Objektdimensionen sowie Thumbnails).",
+        "operationId" : "getFileMetadata",
+        "parameters" : [ {
+          "name" : "filename",
+          "in" : "query",
+          "required" : true,
+          "description" : "Relativer Pfad zur G-Code- oder 3MF-Datei",
+          "schema" : {
+            "type" : "string",
+            "example" : "snapmaker_u1_model.3mf"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Detaillierte Dateimetadaten",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/FileMetadataResponse"
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Datei nicht gefunden"
+          }
+        }
+      }
+    },
+    "/server/files/upload" : {
+      "post" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Druckdatei hochladen (G-Code / 3MF)",
+        "description" : "Lädt eine G-Code- oder 3MF-Datei auf den Snapmaker U1 hoch. Kann optional sofort gestartet werden (`print=true`).",
+        "operationId" : "uploadFile",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "required" : [ "file" ],
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary",
+                    "description" : "Die hochzuladende Datei"
+                  },
+                  "root" : {
+                    "type" : "string",
+                    "default" : "gcodes",
+                    "description" : "Ziel-Wurzelordner"
+                  },
+                  "print" : {
+                    "type" : "boolean",
+                    "default" : false,
+                    "description" : "Bei true wird der Druck unmittelbar nach dem Upload gestartet"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Datei erfolgreich hochgeladen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "item" : {
+                          "$ref" : "#/components/schemas/FileEntry"
+                        },
+                        "print_started" : {
+                          "type" : "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/delete" : {
+      "delete" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Datei löschen",
+        "description" : "Entfernt eine Datei aus dem Drucker-Speicher.",
+        "operationId" : "deleteFile",
+        "parameters" : [ {
+          "name" : "path",
+          "in" : "query",
+          "required" : true,
+          "description" : "Pfad zur Datei (z. B. `gcodes/test.gcode`)",
+          "schema" : {
+            "type" : "string",
+            "example" : "gcodes/old_print.gcode"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Datei erfolgreich gelöscht",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "string",
+                      "example" : "old_print.gcode"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/directory" : {
+      "post" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Neues Verzeichnis erstellen",
+        "description" : "Erstellt ein neues Unterverzeichnis im Dateisystem.",
+        "operationId" : "createDirectory",
+        "parameters" : [ {
+          "name" : "path",
+          "in" : "query",
+          "required" : true,
+          "description" : "Zu erstellender Verzeichnispfad (z. B. `gcodes/PLA_Projects`)",
+          "schema" : {
+            "type" : "string",
+            "example" : "gcodes/PLA_Projects"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Verzeichnis erstellt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Verzeichnis löschen",
+        "description" : "Löscht ein bestehendes Verzeichnis.",
+        "operationId" : "deleteDirectory",
+        "parameters" : [ {
+          "name" : "path",
+          "in" : "query",
+          "required" : true,
+          "description" : "Zu löschender Pfad",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "force",
+          "in" : "query",
+          "required" : false,
+          "description" : "Wenn true, wird das Verzeichnis rekursiv gelöscht",
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Verzeichnis gelöscht",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/move" : {
+      "post" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Datei oder Verzeichnis verschieben / umbenennen",
+        "description" : "Verschiebt oder benennt eine Datei bzw. einen Ordner um.",
+        "operationId" : "moveFile",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "required" : [ "source", "dest" ],
+                "properties" : {
+                  "source" : {
+                    "type" : "string",
+                    "example" : "gcodes/test.gcode"
+                  },
+                  "dest" : {
+                    "type" : "string",
+                    "example" : "gcodes/archive/test.gcode"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Datei erfolgreich verschoben",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/files/copy" : {
+      "post" : {
+        "tags" : [ "File Management (G-Code & 3MF)" ],
+        "summary" : "Datei oder Verzeichnis kopieren",
+        "description" : "Erstellt eine Kopie einer Datei oder eines Ordners.",
+        "operationId" : "copyFile",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "required" : [ "source", "dest" ],
+                "properties" : {
+                  "source" : {
+                    "type" : "string",
+                    "example" : "gcodes/template.gcode"
+                  },
+                  "dest" : {
+                    "type" : "string",
+                    "example" : "gcodes/template_copy.gcode"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Datei erfolgreich kopiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/info" : {
+      "get" : {
+        "tags" : [ "Moonraker Server & Cache" ],
+        "summary" : "Moonraker Server-Status & Zustand",
+        "description" : "Liefert Statusinformationen über den Moonraker-Prozess, die Klippy-Verbindung und registrierte Komponenten.",
+        "operationId" : "getServerInfo",
+        "responses" : {
+          "200" : {
+            "description" : "Moonraker-Statusdaten",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ServerInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/config" : {
+      "get" : {
+        "tags" : [ "Moonraker Server & Cache" ],
+        "summary" : "Moonraker-Konfiguration abrufen",
+        "description" : "Gibt die aktuell geladene Konfiguration von `moonraker.conf` zurück.",
+        "operationId" : "getServerConfig",
+        "responses" : {
+          "200" : {
+            "description" : "Konfigurationsabschnitte von Moonraker",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "config" : {
+                          "type" : "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/restart" : {
+      "post" : {
+        "tags" : [ "Moonraker Server & Cache" ],
+        "summary" : "Moonraker-Server neustarten",
+        "description" : "Startet den Python-Moonraker-Serverdienst neu.",
+        "operationId" : "restartServer",
+        "responses" : {
+          "200" : {
+            "description" : "Neustart initiiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/gcode_store" : {
+      "get" : {
+        "tags" : [ "Moonraker Server & Cache" ],
+        "summary" : "G-Code-Konsolenverlauf (Gcode Store)",
+        "description" : "Ruft den im Speicher gepufferten Konsolenverlauf der G-Code-Ausgaben ab (bis zu 1000 Zeilen).",
+        "operationId" : "getGcodeStore",
+        "parameters" : [ {
+          "name" : "count",
+          "in" : "query",
+          "required" : false,
+          "description" : "Maximale Anzahl zurückzugebender Zeilen",
+          "schema" : {
+            "type" : "integer",
+            "default" : 100
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Konsolenausgaben",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "gcode_store" : {
+                          "type" : "array",
+                          "items" : {
+                            "type" : "object",
+                            "properties" : {
+                              "message" : {
+                                "type" : "string"
+                              },
+                              "time" : {
+                                "type" : "number"
+                              },
+                              "type" : {
+                                "type" : "string",
+                                "enum" : [ "response", "command", "echo" ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/temperature_store" : {
+      "get" : {
+        "tags" : [ "Moonraker Server & Cache" ],
+        "summary" : "Temperaturverlauf aller Sensoren",
+        "description" : "Liefert die historische Zeitreihe aller Heizelemente und Temperatursensoren (Extruder, Heizbett, Bauraum, MCU).",
+        "operationId" : "getTemperatureStore",
+        "parameters" : [ {
+          "name" : "include_monitors",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Historische Temperaturkurven",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "additionalProperties" : {
+                        "type" : "object",
+                        "properties" : {
+                          "temperatures" : {
+                            "type" : "array",
+                            "items" : {
+                              "type" : "number"
+                            }
+                          },
+                          "targets" : {
+                            "type" : "array",
+                            "items" : {
+                              "type" : "number"
+                            }
+                          },
+                          "powers" : {
+                            "type" : "array",
+                            "items" : {
+                              "type" : "number"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/job_queue/status" : {
+      "get" : {
+        "tags" : [ "Job Queue" ],
+        "summary" : "Status der Druck-Warteschlange abrufen",
+        "description" : "Liefert den aktuellen Status der Moonraker Job-Queue sowie die Liste der anstehenden Druckjobs.",
+        "operationId" : "getJobQueueStatus",
+        "responses" : {
+          "200" : {
+            "description" : "Job-Queue Zustand",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "queue_state" : {
+                          "type" : "string",
+                          "enum" : [ "ready", "paused", "starting" ]
+                        },
+                        "jobs" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/QueuedJob"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/job_queue/job" : {
+      "post" : {
+        "tags" : [ "Job Queue" ],
+        "summary" : "Druckjob zur Warteschlange hinzufügen",
+        "description" : "Reiht eine oder mehrere Druckdateien in die Job-Queue ein.",
+        "operationId" : "addJobQueueJob",
+        "requestBody" : {
+          "required" : true,
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "object",
+                "required" : [ "filenames" ],
+                "properties" : {
+                  "filenames" : {
+                    "type" : "array",
+                    "items" : {
+                      "type" : "string"
+                    },
+                    "example" : [ "part1.gcode", "part2.3mf" ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "Jobs erfolgreich eingereiht",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "queued_jobs" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/QueuedJob"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "Job Queue" ],
+        "summary" : "Job aus Warteschlange entfernen",
+        "description" : "Entfernt einen Job anhand seiner Job-ID aus der Warteschlange.",
+        "operationId" : "removeJobQueueJob",
+        "parameters" : [ {
+          "name" : "job_ids",
+          "in" : "query",
+          "required" : true,
+          "description" : "Kommagetrennte Liste von Job-IDs",
+          "schema" : {
+            "type" : "string",
+            "example" : "12345"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Job entfernt",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/job_queue/pause" : {
+      "post" : {
+        "tags" : [ "Job Queue" ],
+        "summary" : "Job-Queue pausieren",
+        "description" : "Pausiert die automatische Abarbeitung nachfolgender Druckaufträge in der Warteschlange.",
+        "operationId" : "pauseJobQueue",
+        "responses" : {
+          "200" : {
+            "description" : "Queue pausiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/job_queue/start" : {
+      "post" : {
+        "tags" : [ "Job Queue" ],
+        "summary" : "Job-Queue starten",
+        "description" : "Startet bzw. setzt die Abarbeitung der Warteschlange fort.",
+        "operationId" : "startJobQueue",
+        "responses" : {
+          "200" : {
+            "description" : "Queue gestartet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/system_info" : {
+      "get" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Host-Systeminformationen abrufen",
+        "description" : "Liefert Informationen über die Hardware des Host-Controllers (CPU, RAM, Speicherplatz, Netzwerkschnittstellen, Distribution).",
+        "operationId" : "getSystemInfo",
+        "responses" : {
+          "200" : {
+            "description" : "Systeminformationen",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "system_info" : {
+                          "type" : "object",
+                          "properties" : {
+                            "cpu_info" : {
+                              "type" : "object"
+                            },
+                            "distribution" : {
+                              "type" : "object"
+                            },
+                            "network" : {
+                              "type" : "object"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/proc_stats" : {
+      "get" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "CPU- und Speicher-Auslastung (Prozess-Statistiken)",
+        "description" : "Liefert aktuelle Auslastungsdaten für Moonraker, Klipper und das Linux-System (CPU %, Speichernutzung, Systemtemperatur).",
+        "operationId" : "getProcStats",
+        "responses" : {
+          "200" : {
+            "description" : "Prozess-Statistiken",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "moonraker_stats" : {
+                          "type" : "object"
+                        },
+                        "cpu_temp" : {
+                          "type" : "number"
+                        },
+                        "system_cpu_usage" : {
+                          "type" : "object"
+                        },
+                        "system_memory" : {
+                          "type" : "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/shutdown" : {
+      "post" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Host-Betriebssystem herunterfahren",
+        "description" : "Fährt das Linux-Hostsystem des Druckers sicher herunter.",
+        "operationId" : "shutdownMachine",
+        "responses" : {
+          "200" : {
+            "description" : "Shutdown eingeleitet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/reboot" : {
+      "post" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Host-Betriebssystem neustarten",
+        "description" : "Startet das Linux-Hostsystem des Druckers neu.",
+        "operationId" : "rebootMachine",
+        "responses" : {
+          "200" : {
+            "description" : "Reboot eingeleitet",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/device_power/devices" : {
+      "get" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Konfigurierte Power-Devices abfragen",
+        "description" : "Fragt den Schaltzustand konfigurierter Relais oder Smart-Plugs ab.",
+        "operationId" : "getDevicePowerDevices",
+        "responses" : {
+          "200" : {
+            "description" : "Liste der Power-Devices",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "devices" : {
+                          "type" : "array",
+                          "items" : {
+                            "type" : "object",
+                            "properties" : {
+                              "device" : {
+                                "type" : "string"
+                              },
+                              "status" : {
+                                "type" : "string",
+                                "enum" : [ "on", "off", "error", "init" ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/device_power/device" : {
+      "post" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Power-Device schalten",
+        "description" : "Schaltet ein konfiguriertes Power-Gerät ein, aus oder toggelt den Zustand.",
+        "operationId" : "setDevicePower",
+        "parameters" : [ {
+          "name" : "device",
+          "in" : "query",
+          "required" : true,
+          "description" : "Name des konfigurierten Geräts",
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "action",
+          "in" : "query",
+          "required" : true,
+          "description" : "Schaltaktion",
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "on", "off", "toggle" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Schaltzustand geändert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "additionalProperties" : {
+                        "type" : "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/update/status" : {
+      "get" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Software-Update-Status",
+        "description" : "Prüft den Update-Status für Klipper, Moonraker, Frontends und Systempakete.",
+        "operationId" : "getUpdateStatus",
+        "responses" : {
+          "200" : {
+            "description" : "Update-Statusübersicht",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "version_info" : {
+                          "type" : "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/machine/update/refresh" : {
+      "post" : {
+        "tags" : [ "Machine & Host OS" ],
+        "summary" : "Update-Prüfung aktualisieren",
+        "description" : "Triggert einen Refresh der Git-Repositories und Paketlisten.",
+        "operationId" : "refreshUpdateStatus",
+        "responses" : {
+          "200" : {
+            "description" : "Refresh initiiert",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StandardOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/webcams/list" : {
+      "get" : {
+        "tags" : [ "Webcams" ],
+        "summary" : "Konfigurierte Kameras abrufen",
+        "description" : "Liefert eine Liste aller am Snapmaker U1 eingerichteten Webcams inklusive Live-Stream-URL und Schnappschuss-URL.",
+        "operationId" : "listWebcams",
+        "responses" : {
+          "200" : {
+            "description" : "Kameraliste",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "properties" : {
+                    "result" : {
+                      "type" : "object",
+                      "properties" : {
+                        "webcams" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/WebcamInfo"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "securitySchemes" : {
+      "ApiKeyAuth" : {
+        "type" : "apiKey",
+        "in" : "header",
+        "name" : "X-Api-Key",
+        "description" : "Optionaler Moonraker API-Schlüssel für nicht vertrauenswürdige Clients"
+      }
+    },
+    "schemas" : {
+      "StandardOkResponse" : {
+        "type" : "object",
+        "properties" : {
+          "result" : {
+            "type" : "string",
+            "example" : "ok"
+          }
+        }
+      },
+      "PrinterInfoResponse" : {
+        "type" : "object",
+        "properties" : {
+          "result" : {
+            "type" : "object",
+            "properties" : {
+              "state" : {
+                "type" : "string",
+                "enum" : [ "ready", "startup", "shutdown", "error" ],
+                "example" : "ready"
+              },
+              "state_message" : {
+                "type" : "string",
+                "example" : "Printer is ready"
+              },
+              "hostname" : {
+                "type" : "string",
+                "example" : "snapmaker-u1"
+              },
+              "klipper_path" : {
+                "type" : "string",
+                "example" : "/home/lava/klipper"
+              },
+              "python_path" : {
+                "type" : "string",
+                "example" : "/home/lava/klipper-env/bin/python"
+              },
+              "software_version" : {
+                "type" : "string",
+                "example" : "v0.12.0-snapmaker-u1"
+              }
+            }
+          }
+        }
+      },
+      "ServerInfoResponse" : {
+        "type" : "object",
+        "properties" : {
+          "result" : {
+            "type" : "object",
+            "properties" : {
+              "klippy_connected" : {
+                "type" : "boolean",
+                "example" : true
+              },
+              "klippy_state" : {
+                "type" : "string",
+                "example" : "ready"
+              },
+              "components" : {
+                "type" : "array",
+                "items" : {
+                  "type" : "string"
+                },
+                "example" : [ "database", "file_manager", "update_manager", "klippy_apis", "job_queue", "webcam" ]
+              },
+              "moonraker_version" : {
+                "type" : "string",
+                "example" : "v0.8.0-u1"
+              }
+            }
+          }
+        }
+      },
+      "PrinterObjectsQueryResponse" : {
+        "type" : "object",
+        "properties" : {
+          "result" : {
+            "type" : "object",
+            "properties" : {
+              "eventtime" : {
+                "type" : "number",
+                "example" : 1.71456789123E8
+              },
+              "status" : {
+                "type" : "object",
+                "description" : "Live-Status der abgefragten Klipper-Objekte",
+                "properties" : {
+                  "print_stats" : {
+                    "type" : "object",
+                    "properties" : {
+                      "filename" : {
+                        "type" : "string",
+                        "example" : "snapmaker_multi_color.3mf"
+                      },
+                      "total_duration" : {
+                        "type" : "number",
+                        "example" : 1820.5
+                      },
+                      "print_duration" : {
+                        "type" : "number",
+                        "example" : 1740.2
+                      },
+                      "filament_used" : {
+                        "type" : "number",
+                        "example" : 1450.8
+                      },
+                      "state" : {
+                        "type" : "string",
+                        "enum" : [ "standby", "printing", "paused", "complete", "error" ],
+                        "example" : "printing"
+                      },
+                      "message" : {
+                        "type" : "string",
+                        "example" : ""
+                      }
+                    }
+                  },
+                  "toolhead" : {
+                    "type" : "object",
+                    "properties" : {
+                      "position" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "number"
+                        },
+                        "example" : [ 120.0, 110.5, 45.2, 342.1 ]
+                      },
+                      "homed_axes" : {
+                        "type" : "string",
+                        "example" : "xyz"
+                      },
+                      "print_time" : {
+                        "type" : "number",
+                        "example" : 1740.2
+                      },
+                      "estimated_print_time" : {
+                        "type" : "number",
+                        "example" : 3600.0
+                      },
+                      "extruder" : {
+                        "type" : "string",
+                        "example" : "extruder"
+                      }
+                    }
+                  },
+                  "heater_bed" : {
+                    "type" : "object",
+                    "properties" : {
+                      "temperature" : {
+                        "type" : "number",
+                        "example" : 60.0
+                      },
+                      "target" : {
+                        "type" : "number",
+                        "example" : 60.0
+                      },
+                      "power" : {
+                        "type" : "number",
+                        "example" : 0.35
+                      }
+                    }
+                  },
+                  "extruder" : {
+                    "type" : "object",
+                    "description" : "Primärer Druckkopf / Extruder T0",
+                    "properties" : {
+                      "temperature" : {
+                        "type" : "number",
+                        "example" : 215.2
+                      },
+                      "target" : {
+                        "type" : "number",
+                        "example" : 215.0
+                      },
+                      "power" : {
+                        "type" : "number",
+                        "example" : 0.42
+                      },
+                      "pressure_advance" : {
+                        "type" : "number",
+                        "example" : 0.04
+                      }
+                    }
+                  },
+                  "extruder1" : {
+                    "type" : "object",
+                    "description" : "Sekundärer Druckkopf / Extruder T1 (Snapmaker U1 Multi-Tool)",
+                    "properties" : {
+                      "temperature" : {
+                        "type" : "number",
+                        "example" : 200.0
+                      },
+                      "target" : {
+                        "type" : "number",
+                        "example" : 200.0
+                      },
+                      "power" : {
+                        "type" : "number",
+                        "example" : 0.38
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "FileEntry" : {
+        "type" : "object",
+        "properties" : {
+          "path" : {
+            "type" : "string",
+            "example" : "benchy.gcode"
+          },
+          "modified" : {
+            "type" : "number",
+            "example" : 1.714561234E9
+          },
+          "size" : {
+            "type" : "integer",
+            "example" : 4528120
+          },
+          "permissions" : {
+            "type" : "string",
+            "example" : "rw"
+          }
+        }
+      },
+      "FileMetadataResponse" : {
+        "type" : "object",
+        "properties" : {
+          "result" : {
+            "type" : "object",
+            "properties" : {
+              "filename" : {
+                "type" : "string",
+                "example" : "sample_model.3mf"
+              },
+              "size" : {
+                "type" : "integer",
+                "example" : 12458900
+              },
+              "modified" : {
+                "type" : "number",
+                "example" : 1.714561234E9
+              },
+              "slicer" : {
+                "type" : "string",
+                "example" : "Snapmaker Orca / Snapmaker Studio"
+              },
+              "slicer_version" : {
+                "type" : "string",
+                "example" : "2.1.0"
+              },
+              "estimated_time" : {
+                "type" : "number",
+                "example" : 4320.0
+              },
+              "filament_total" : {
+                "type" : "number",
+                "example" : 15420.5
+              },
+              "layer_height" : {
+                "type" : "number",
+                "example" : 0.2
+              },
+              "first_layer_height" : {
+                "type" : "number",
+                "example" : 0.28
+              },
+              "layer_count" : {
+                "type" : "integer",
+                "example" : 250
+              },
+              "thumbnails" : {
+                "type" : "array",
+                "items" : {
+                  "type" : "object",
+                  "properties" : {
+                    "width" : {
+                      "type" : "integer",
+                      "example" : 300
+                    },
+                    "height" : {
+                      "type" : "integer",
+                      "example" : 300
+                    },
+                    "size" : {
+                      "type" : "integer",
+                      "example" : 15420
+                    },
+                    "relative_path" : {
+                      "type" : "string",
+                      "example" : ".thumbs/sample_model-300x300.png"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "QueuedJob" : {
+        "type" : "object",
+        "properties" : {
+          "job_id" : {
+            "type" : "string",
+            "example" : "job_01hxyz"
+          },
+          "filename" : {
+            "type" : "string",
+            "example" : "bracket.gcode"
+          },
+          "time_added" : {
+            "type" : "number",
+            "example" : 1.714562E9
+          },
+          "time_in_queue" : {
+            "type" : "number",
+            "example" : 120.0
+          }
+        }
+      },
+      "WebcamInfo" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "example" : "chamber_cam"
+          },
+          "location" : {
+            "type" : "string",
+            "example" : "printer"
+          },
+          "service" : {
+            "type" : "string",
+            "example" : "mjpegstreamer"
+          },
+          "stream_url" : {
+            "type" : "string",
+            "example" : "/webcam/?action=stream"
+          },
+          "snapshot_url" : {
+            "type" : "string",
+            "example" : "/webcam/?action=snapshot"
+          },
+          "flip_horizontal" : {
+            "type" : "boolean",
+            "example" : false
+          },
+          "flip_vertical" : {
+            "type" : "boolean",
+            "example" : false
+          },
+          "rotation" : {
+            "type" : "integer",
+            "example" : 0
+          },
+          "aspect_ratio" : {
+            "type" : "string",
+            "example" : "16:9"
+          }
+        }
+      }
+    }
+  }
+}
