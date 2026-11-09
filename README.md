@@ -10,6 +10,10 @@ is used to provide Moonraker's server functionality.
 Documentation for users and developers can be found on
 [Read the Docs](https://moonraker.readthedocs.io/en/latest/).
 
+[Swagger API Dokumentation EN](https://app.swaggerhub.com/apis/klipper/EN-Moonraker-API/1.0.0)
+[Swagger API Dokumentation DE](https://app.swaggerhub.com/apis/klipper/DE-Moonraker-API/1.0.0)
+
+
 ### Clients
 
 Note that Moonraker does not come bundled with a client, you will need to
